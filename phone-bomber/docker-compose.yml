@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  bomber:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - SECRET_KEY=change-this-to-a-strong-random-key
+      - TWILIO_ACCOUNT_SID=
+      - TWILIO_AUTH_TOKEN=
+      - TWILIO_PHONE_NUMBER=
+      - TEXTLBOT_API_KEY=
+    volumes:
+      - ./instance:/app/instance  # Persist SQLite DB
+    restart: unless-stopped
