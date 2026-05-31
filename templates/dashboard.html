@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phone Bomber - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #0a0a1a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+        .card { background: #14142e; border: 1px solid #2a2a5a; border-radius: 12px; }
+        .card-header { background: #1a1a3e; border-bottom: 1px solid #2a2a5a; color: #8b8bf0; }
+        .form-control, .form-select { background: #1a1a3e; border: 1px solid #2a2a5a; color: #e0e0e0; }
+        .form-control:focus, .form-select:focus { background: #1a1a3e; color: #e0e0e0; }
+        .btn-primary { background: #5a5aef; border: none; }
+        .btn-primary:hover { background: #7a7aff; }
+        .btn-danger { background: #dc3545; border: none; }
+        .badge-running { background: #28a745; }
+        .badge-stopped { background: #dc3545; }
+        .attack-item { padding: 10px; margin: 5px 0; background: #1a1a3e; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark px-3">
+        <span class="navbar-brand mb-0 h1">📱 Phone Bomber</span>
+        <div class="d-flex align-items-center">
+            <span class="text-muted me-3">{{ current_user.username }}</span>
+            <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container-fluid p-4">
+        <div class="row">
+            <!-- Attack Configuration -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header">⚙️ Attack Configuration</div>
+                    <div class="card-body">
+                        <form id="attackForm">
+                            <div class="mb-3">
+                                <label class="form-label">Target Number</label>
+                                <input type="tel" class="form-control" id="target" placeholder="+8801XXXXXXXXX" required>
+                                <small class="text-muted">Include country code (e.g., +880 for BD)</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Attack Type</label>
+                                <select class="form-select" id="type">
+                                    <option value="sms">📨 SMS Only</option>
+                                    <option value="call">📞 Call Only</option>
+                                    <option value="combined">🔥 SMS + Call Combined</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Number of Bursts</label>
+                                <input type="number" class="form-control" id="count" value="5" min="1" max="100">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Delay (seconds) between each</label>
+                                <input type="number" class="form-control" id="delay" value="2" min="1" max="60" step="0.5">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Message (for SMS / Call)</label>
+                                <textarea class="form-control" id="message" rows="2">Security test alert - authorized pentest</textarea>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary w-100 mb-2">🚀 Start Attack</button>
+                            <button type="button" class="btn btn-danger w-100" id="stopAllBtn">⏹ Stop All Attacks</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Active Attacks & Logs -->
+            <div class="col-md-8 mb-4">
+                <!-- Active Attacks -->
+                <div class="card mb-4">
+                    <div class="card-header">🟢 Active Attacks</div>
+                    <div class="card-body" id="activeAttacks">
+                        {% if active_attacks %}
+                            {% for id, info in active_attacks.items() %}
+                                <div class="attack-item" data-id="{{ id }}">
+                                    <strong>{{ id }}</strong> - {{ info.type }} → {{ info.target }}
+                                    <span class="badge badge-running float-end">Running</span>
+                                    <button class="btn btn-sm btn-danger float-end me-2 stop-btn" data-id="{{ id }}">Stop</button>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">No active attacks</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Logs -->
+                <div class="card">
+                    <div class="card-header">📋 Attack Logs</div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        {% if logs %}
+                            <table class="table table-dark table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Target</th>
+                                        <th>Type</th>
+                                        <th>Count</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in logs %}
+                                    <tr>
+                                        <td>{{ log.timestamp.strftime('%H:%M:%S') }}</td>
+                                        <td>{{ log.target }}</td>
+                                        <td>{{ log.attack_type }}</td>
+                                        <td>{{ log.count }}</td>
+                                        <td><span class="badge bg-{{ 'success' if log.status == 'completed' else 'warning' }}">{{ log.status }}</span></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        {% else %}
+                            <p class="text-muted">No attack logs yet</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Start Attack
+        document.getElementById('attackForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const payload = {
+                target: document.getElementById('target').value,
+                type: document.getElementById('type').value,
+                count: parseInt(document.getElementById('count').value),
+                delay: parseFloat(document.getElementById('delay').value),
+                message: document.getElementById('message').value
+            };
+            
+            try {
+                const resp = await fetch('/api/attack/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await resp.json();
+                
+                if (data.success) {
+                    alert(`Attack started! ID: ${data.attack_id}`);
+                    location.reload();
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                alert(`Error: ${err.message}`);
+            }
+        });
+
+        // Stop individual attack
+        document.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('stop-btn')) {
+                const attackId = e.target.dataset.id;
+                
+                try {
+                    const resp = await fetch('/api/attack/stop', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ attack_id: attackId })
+                    });
+                    const data = await resp.json();
+                    
+                    if (data.success) {
+                        location.reload();
+                    }
+                } catch (err) {
+                    alert(`Error: ${err.message}`);
+                }
+            }
+        });
+
+        // Stop All
+        document.getElementById('stopAllBtn').addEventListener('click', async () => {
+            try {
+                const statusResp = await fetch('/api/attack/status');
+                const statusData = await statusResp.json();
+                
+                for (const attackId of statusData.active_attacks) {
+                    await fetch('/api/attack/stop', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ attack_id: attackId })
+                    });
+                }
+                
+                location.reload();
+            } catch (err) {
+                alert(`Error: ${err.message}`);
+            }
+        });
+
+        // Auto-refresh active attacks every 5s
+        setInterval(async () => {
+            try {
+                const resp = await fetch('/api/attack/status');
+                const data = await resp.json();
+                
+                const container = document.getElementById('activeAttacks');
+                if (data.active_attacks.length === 0) {
+                    container.innerHTML = '<p class="text-muted">No active attacks</p>';
+                }
+            } catch (err) {
+                // ignore
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
